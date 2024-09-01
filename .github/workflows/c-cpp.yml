@@ -1,0 +1,71 @@
+name: Build
+on:
+  push:
+jobs:
+  build-project:
+    name: Build Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4.1.7
+        
+      - name: Fetch master
+        run: |
+          git fetch --no-tags --prune --depth=1 origin master
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Build Project
+        uses: threeal/cmake-action@v2.0.0
+        with:
+          generator: Ninja
+          options: |
+            CMAKE_EXPORT_COMPILE_COMMANDS=ON
+            ENABLE_COVERAGE=ON
+          run-build: false
+
+      - name: Get modified source
+        id: get-modified-source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const diff = require('./scripts/diff.js');
+            return diff();
+
+      - name: Get affected targets
+        id: find-targets
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const targets = require('./scripts/targets.js');
+            return targets('${{steps.get-modified-source.outputs.result}}');
+            
+      - name: Build affected targets
+        if: ${{steps.find-targets.outputs.result != ''}} 
+        run:  ninja -C build ${{steps.find-targets.outputs.result}} 
+        
+      - name: Run ctest
+        if: ${{steps.find-targets.outputs.result != ''}} 
+        run: ctest --test-dir build
+       
+      - name: Generate a code coverage report
+        if: ${{steps.find-targets.outputs.result != ''}} 
+        uses: threeal/gcovr-action@xml-out
+        with:
+          xml-out: coverage.xml
+
+      - run: npm install xml2js
+     
+      - name: Check coverage report
+        id: check-coverage
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const check = require('./scripts/check-coverage.js');
+            return await check('${{steps.get-modified-source.outputs.result}}', 'coverage.xml');
+
+      - name: Return coverage result
+        if: ${{steps.check-coverage.outputs.result == false}}
+        run: exit(1)
