@@ -67,5 +67,5 @@ jobs:
             return await check('${{steps.get-modified-source.outputs.result}}', 'coverage.xml');
 
       - name: Return coverage result
-        if: ${{steps.check-coverage.outputs.result == false}}
-        run: exit(1)
+        if: ${{steps.check-coverage.outputs.result == 'false'}}
+        run: exit 1
